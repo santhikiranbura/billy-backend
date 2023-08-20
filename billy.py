@@ -2,6 +2,7 @@ import spacy
 import json
 from datetime import datetime, timedelta
 from dateutil.parser import parse
+from numerizer import numerize
 
 nlp = spacy.load("en_core_web_md")
 
@@ -37,41 +38,69 @@ def isItAnExpense(verb):
 
 
 def getNearestBillName(text, billnames):
+    if text is None:
+        return None
     max_similarity = 0
     closestBillName = None
     for billname in billnames:
-        similarity = nlp(text).similarity(nlp(billname))
-        if similarity > 0.5:
-            max_similarity = max(similarity, max_similarity)
-            closestBillName = billname
-    if closestBillName is None:
+        similarity = nlp(text.lower()).similarity(nlp(billname.lower()))
+        if similarity > 0.6:
+            if max_similarity < similarity:
+              max_similarity = similarity
+              closestBillName = billname
+    if closestBillName is None and text is not None:
         closestBillName = text.split("/t")[0].strip()
     return closestBillName
 
 
-def getValidAmount(amount):
-    amount = amount.split(" ")[0]
+def getValidAmount(money):
+    money = numerize(money)
+    amount = money.split(" ")[0]
     return int(amount)
 
 
 def getValidDate(date):
-    dt = parse(date)
-    date = dt.strftime("%d-%m-%Y")
+    if date == "today":
+        dt = datetime.now().date()
+    elif date == "yesterday":
+        dt = (datetime.now() - timedelta(days=1)).date()
+    elif date == "tomorrow":
+        dt = (datetime.now() + timedelta(days=1)).date()
+    else:
+        dt = parse(date)
+    if dt is not None:
+        date = dt.strftime("%Y-%m-%d")
     return date
 
 
 def billEvent(bill, doc, billnames):
+
     for ent in doc.ents:
         if ent.label_ == "MONEY":
             bill.amount = getValidAmount(ent.text)
         if ent.label_ == "DATE":
             bill.date = getValidDate(ent.text)
+    text = None
+    numbers = 0
+    number = 0
+    for token in doc:
+        if (token.dep_ == "dobj" or token.dep_ == "compound") and "rupee" not in token.text:
+            if text is None:
+                text = ""
+            text = text + " " + token.text
+
+        if token.pos_ == "NUM":
+            number = token.text
+            numbers = numbers + 1
+        print(token.pos_,token.dep_,token.lemma_)
+    if text is None and bill.name is None:
+      for token in doc:
+        if token.dep_ == "ROOT" and token.pos_ != "VERB":
+            text = token.text
     if bill.name is None:
-        text = ""
-        for token in doc:
-            if token.dep_ == "dobj" or token.dep_ == "compound":
-                text = text + " " + token.text
-        bill.name = getNearestBillName(text, billnames)
+      bill.name = getNearestBillName(text, billnames)
+    if bill.date is not None and numbers ==1:
+      bill.amount = getValidAmount(number)
 
 
 def getEvent(doc):
@@ -99,6 +128,8 @@ class Event:
     def bill(self):
         if self.data is None:
             self.data = {}
+            bill = Bill(None)
+        elif "bill" not in self.data:
             bill = Bill(None)
         else:
             bill = Bill(self.data["bill"])
