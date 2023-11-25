@@ -3,9 +3,22 @@ import json
 from datetime import datetime, timedelta
 from dateutil.parser import parse
 from numerizer import numerize
-
+import random
+import nltk
+from nltk.chat.util import Chat, reflections
+from nltk.corpus import wordnet
 nlp = spacy.load("en_core_web_md")
 
+patterns = [
+    (r"hi|hello|hey", ["Hello!", "Hi there!","Hello there!","Hey"]),
+    (r"how are you", ["I'm good, thank you.", "I'm doing well.","I'm awesome"]),
+    (r"what is your name|who are you", ["I'm a simple chatbot.", "You can call me Billy."]),
+    (r"quit|bye", ["Goodbye!", "See you later!"]),
+]
+
+chatbot = Chat(patterns, reflections)
+
+nltk.download("punkt")
 
 class Bill:
     def init(self):
@@ -18,17 +31,6 @@ class Bill:
             vars(self).update(dict)
         else:
             self.init()
-
-    # def isValid(self):
-    #   if self.name and self.amount and self.date:
-    #     return True,"SUCCESS"
-    #   elif self.name==None:
-    #     return False,"name"
-    #   elif self.amount==None:
-    #     return False,"amount"
-    #   elif self.date==None:
-    #     return False,"date"
-
 
 def isItAnExpense(verb):
     if nlp("pay made bought recharge").similarity(nlp(verb)) > 0.4:
@@ -110,7 +112,6 @@ def getEvent(doc):
             return "bill"
     return None
 
-
 class Event:
     def __init__(self, name, query, data):
         self.name = name
@@ -124,7 +125,20 @@ class Event:
         if name is not None:
             self.name = name
             getattr(self, name)()
-
+        else:
+            self.data.update(comments=chatbot.respond(self.query))
+          
+    def validate(self,bill):
+      if bill.name is not None and bill.amount is not None and bill.date is not None:
+        return "Successfully created a bill"
+      if bill.name is None:
+        return random.choice(["What did you buy?","What did you purchase?","What items did you acquire?","What did you get?","What did you invest in?","What things did you procure?"])
+      elif bill.amount is None:
+        return random.choice(["How much you spent","How much did you expend?","What was your expenditure?","What was the amount you used?","What was your spending?","How much money did you put into it?"])
+      elif bill.date is None:
+        return random.choice(["When did you make this expense?","When did you incur this cost?","At what time did you spend money on this?","When did you make this expenditure?","What was the date of this expense?","When did you incur this financial outlay?"])
+      else:
+        return random.choice(["I'm having difficulty comprehending.","I'm struggling to grasp this.","It's not clear to me.","I find it hard to understand.","I'm having trouble making sense of it"]);
     def bill(self):
         if self.data is None:
             self.data = {}
@@ -139,3 +153,5 @@ class Event:
             billnames = self.data["billnames"]
         billEvent(bill, self.doc, billnames)
         self.data.update(bill=vars(bill))
+        comments = self.validate(bill)
+        self.data.update(comments=comments)
